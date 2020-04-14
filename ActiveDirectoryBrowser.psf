@@ -1814,53 +1814,66 @@ function Link-GpoToLocation
 			$rtb_output.Lines += "Working Container: $($container.canonicalName)"
 			
 			# for each selected GPO (array of tree nodes)
-			$GroupPolicyTreeNodes.Keys | %{
-				# get the gpo
-				$gpo = $GroupPolicyTreeNodes[$_].Tag
-				
-				Write-Debug "Linking $($gpo.DisplayName) ($($gpo.Id)) to $($container.canonicalName) ($($container.ObjectId)) - ENABLED: $LinkEnabled"
-								
-				# passed into the new/set-gplink cmdlet
-				$LinkEnabledValue = "Yes"
-				
-				if (!$LinkEnabled)
+			$keys = [array]$GroupPolicyTreeNodes.Keys
+			for ($i = 0; $i -lt $keys.length; $i++)
+			{
+				try
 				{
-					$LinkEnabledValue = "No"
-					$rtb_output.Lines += "`t- Linking (DISABLED): `"$($gpo.DisplayName)`""
+					$key = $keys[$i]
+					$gpo = $GroupPolicyTreeNodes[$key].Tag
+					
+					Write-Debug "Linking $($gpo.DisplayName) ($($gpo.Id)) to $($container.canonicalName) ($($container.ObjectId)) - ENABLED: $LinkEnabled"
+					
+					# passed into the new/set-gplink cmdlet
+					$LinkEnabledValue = "Yes"
+					
+					if (!$LinkEnabled)
+					{
+						$LinkEnabledValue = "No"
+						$rtb_output.Lines += "`t- Linking (DISABLED): `"$($gpo.DisplayName)`""
+					}
+					else
+					{
+						$rtb_output.Lines += "`t- Linking (ENABLED) : `"$($gpo.DisplayName)`""
+					}
+					
+					# if the link exists, use set-gplink
+					if ($LinkAlreadyExists)
+					{
+						$gpo | Set-GPLink -Target $container.distinguishedName -LinkEnabled $LinkEnabledValue -ErrorAction Stop
+						# reset this to false, so we don't repeat this action on the next iteration
+						$LinkAlreadyExists = $false
+					}
+					# otherwise, use new-gplink
+					else
+					{
+						$gpo | New-GPLink -Target $container.distinguishedName -LinkEnabled $LinkEnabledValue -ErrorAction Stop
+					}
+					
+					# we get here if there is no error
+					$rtb_output.Lines += "`t`t- SUCCESS!"
 				}
-				else
-				{	
-					$rtb_output.Lines += "`t- Linking (ENABLED) : `"$($gpo.DisplayName)`""
-				}
-				
-				# if the link exists, use set-gplink
-				if ($LinkAlreadyExists)
+				catch
 				{
-					$gpo | Set-GPLink -Target $container.distinguishedName -LinkEnabled $LinkEnabledValue -ErrorAction Stop
+					# if this gpo is already linked, re-run only this iteration again with $LinkedAlreadyExists = $true
+					if ($_.Exception.Message -match "is already linked")
+					{
+						Write-Debug "GP Link already exists, re-executing self and will use proper cmdlet..."
+						$rtb_output.Lines += "`t`t- GPO is already linked here, re-running command to update this link!"
+						$LinkAlreadyExists = $true
+						$i--
+					}
+					else
+					{
+						Throw $_
+					}
 				}
-				# otherwise, use new-gplink
-				else
-				{
-					$gpo | New-GPLink -Target $container.distinguishedName -LinkEnabled $LinkEnabledValue -ErrorAction Stop
-				}
-				
-				# we get here if there is no error
-				$rtb_output.Lines += "`t`t- SUCCESS!"
 			}
 		}
 	}
 	catch
 	{
-		if ($_.Exception.Message -match "is already linked")
-		{
-			Write-Debug "GP Link already exists, re-executing self and will use proper cmdlet..."
-			$rtb_output.Lines += "`t`t- GPO is already linked here, re-running command to update this link!"
-			Link-GpoToLocation -LinkEnabled $LinkEnabled -LinkAlreadyExists
-		}
-		else
-		{
-			[System.Windows.Forms.MessageBox]::Show($_, "Error")
-		}
+		[System.Windows.Forms.MessageBox]::Show($_, "Error")
 	}
 }
 
