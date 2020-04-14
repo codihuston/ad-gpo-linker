@@ -64,10 +64,12 @@ function Add-ToTreeView
 		{
 			$node = New-Object -TypeName System.Windows.Forms.TreeNode -ArgumentList $_.$DisplayMember
 		}
+		
+		# ref this object in the tag property
 		$node.Tag = $_
 		
 		# if it was previously in the checked items list, check it again (if re-adding the node to the tree...)
-		if ($CheckedNodes[$_.Id])
+		if ($CheckedNodes -and $CheckedNodes[$_.Id])
 		{
 			$node.Checked = $true
 		}
@@ -98,6 +100,46 @@ function Get-CanonicalName ([string[]]$DistinguishedName)
 		
 		## Create and return the string representation in canonical name format of the supplied DN 
 		"{0}/{1}" -f (($d | Where-Object { $_ -match 'dc=' } | ForEach-Object { $_.Replace('DC=', '') }) -join '.'), ($arr -join '/')
+	}
+}
+
+function Get-CheckedNode
+{
+<#
+	.SYNOPSIS
+		This function collects a list of checked nodes in a TreeView
+
+	.DESCRIPTION
+		This function collects a list of checked nodes in a TreeView
+
+	.PARAMETER  $NodeCollection
+		The collection of nodes to search
+
+	.PARAMETER  $CheckedNodes
+		The ArrayList that will contain the all the checked items
+	
+	.EXAMPLE
+		$CheckedNodes = New-Object System.Collections.ArrayList
+		Get-CheckedNode $treeview1.Nodes $CheckedNodes
+		foreach($node in $CheckedNodes)
+		{	
+			Write-Host $node.Text
+		}
+#>
+	param (
+		[ValidateNotNull()]
+		[System.Windows.Forms.TreeNodeCollection]$NodeCollection,
+		[ValidateNotNull()]
+		[System.Collections.ArrayList]$CheckedNodes
+	)
+	
+	foreach ($Node in $NodeCollection)
+	{
+		if ($Node.Checked)
+		{
+			[void]$CheckedNodes.Add($Node)
+		}
+		Get-CheckedNode $Node.Nodes $CheckedNodes
 	}
 }
 
